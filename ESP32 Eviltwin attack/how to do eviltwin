@@ -1,0 +1,18 @@
+HOW TO DO EVILTWIN ATTACK 
+
+paste Eviltwin attack code in arduino IDE 
+and enter usernme as you want and upload
+
+Open serial monitor and setbaudrate 115200 baud 
+when victim connects to the esp32 network it shows fake login page 
+victim believes that this is thier wifi network and enter thier wifi password because 
+we would jamm their network by esp32 deauthet metod and create a wifi with same name of 
+thier jammed network
+
+for example:
+
+home wifi_4G (which is jammed by deauther method)
+
+home wifi_2.4G  (fake wifi made by eviltwin) 
+
+victim will connect to fke wifi because original wifi was jammed
