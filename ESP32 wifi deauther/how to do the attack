@@ -2,6 +2,12 @@ HOW TO DO WIFI DEAUTHER WITH ESP32
 
 first plug in esp32 in laptop
 
+download these files:
+ESP32 flash tool.exe
+bootloader.bin
+partion.bin
+esp32 penetration.bin
+
 open ESP32 flash tool.exe.  It opens cmd in windows and a pop up box for board selection select ESP32
 and also a table will pop up in that add files 
 
