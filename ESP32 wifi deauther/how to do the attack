@@ -1,0 +1,34 @@
+HOW TO DO WIFI DEAUTHER WITH ESP32
+
+first plug in esp32 in laptop
+
+open ESP32 flash tool.exe.  It opens cmd in windows and a pop up box for board selection select ESP32
+and also a table will pop up in that add files 
+
+first add partion table.bin and type  right side box 0x8000
+next add bootloader.bin and type right side box 0x1000
+and next esp32 wifi penetration tool.bin and type right side box 0x10000
+
+"REFER THE IMAGE ESP32 DEAUTHER TABLE"
+
+select your ESP32 board port in COM 
+ and press start in bottom left side till finish appears
+
+press EN button in ESP32 
+
+a new wifi named managementAP will appear in your laptop wifi press connect
+password: mgmtadmin
+
+open chrome and enter incongito mode and type IP Address 192.168.4.1 "type this address not to be select in search result"
+
+a table will appears 'ESP32 PENETRATION TOOL' showing allavailable wifi 
+
+select wifi network for attack 
+
+and select attack type DOS attack
+
+set attack time (in seconds upto 255) as you want 
+
+press Attack
+ 
+ and the network will be jammed
