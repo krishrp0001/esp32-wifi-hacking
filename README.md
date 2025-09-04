@@ -3,11 +3,12 @@
 
 ✨Functions
 
-All typeof wifi hack are available in this repo.
+All type of wifi hack are available in this repo
 
-# wifi deauther
-# wifi penetration
-# tool evil twin attack
-# air crack
-# honeypot wifi hacking
-# fake wifi
+wifi deauther
+wifi penetration
+tool evil twin attack
+air crack
+honeypot wifi hacking
+fake wifi
+eviltwin attack
