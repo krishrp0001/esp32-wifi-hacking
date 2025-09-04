@@ -6,9 +6,6 @@
 All type of wifi hack are available in this repo.
 
 wifi deauther
-wifi penetration
-tool evil twin attack
-air crack
-honeypot wifi hacking
+wifi penetration tool 
 fake wifi
 eviltwin attack
